@@ -1,0 +1,55 @@
+[project]
+name = "ballspeed"
+version = "0.1.0"
+description = "Cricket ball speed estimator: video in, km/h out."
+authors = [
+    { name = "Sahil Chalke", email = "chalke.sahil1015@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.143.0",
+    "filterpy>=1.4.5",
+    "numpy>=2.4.6",
+    "opencv-python-headless>=5.0.0.93",
+    "pydantic>=2.14.0",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "scipy>=1.17.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+ballspeed-synth = "ballspeed.synth:main"
+
+[build-system]
+requires = ["uv_build>=0.12.6,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: renders or decodes video"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["cv2.*", "filterpy.*", "scipy.*", "mediapipe.*", "ultralytics.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
