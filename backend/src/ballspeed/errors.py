@@ -1,6 +1,7 @@
 from enum import StrEnum
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -33,3 +34,12 @@ class ApiError(Exception):
 async def api_error_handler(_request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, ApiError)
     return JSONResponse(status_code=exc.status, content=exc.payload())
+
+
+async def validation_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, RequestValidationError)
+    first = exc.errors()[0] if exc.errors() else {}
+    where = ".".join(str(p) for p in first.get("loc", ()) if p != "body")
+    msg = str(first.get("msg", "Invalid request")).removeprefix("Value error, ")
+    body = ApiError(ErrorCode.INVALID_INPUT, f"{where}: {msg}" if where else msg).payload()
+    return JSONResponse(status_code=422, content=body)

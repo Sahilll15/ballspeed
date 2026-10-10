@@ -50,3 +50,13 @@ def pytest_approx(v: float) -> object:
     import pytest
 
     return pytest.approx(v)
+
+
+def test_rejects_playlist_disguised_as_mp4(client: TestClient, tmp_path: object) -> None:
+    secret = "/etc/hosts"
+    playlist = f"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nfile://{secret}\n#EXT-X-ENDLIST\n"
+    r = client.post("/api/videos", files={"file": ("x.mp4", playlist.encode(), "video/mp4")})
+    assert r.status_code == 415
+    concat = f"ffconcat version 1.0\nfile '{secret}'\n"
+    r = client.post("/api/videos", files={"file": ("y.mov", concat.encode(), "video/mp4")})
+    assert r.status_code == 415

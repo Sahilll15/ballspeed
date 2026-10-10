@@ -16,13 +16,30 @@ def binary(name: str) -> str:
     return path
 
 
-def run(name: str, args: Sequence[str], *, stdin: bytes | None = None) -> bytes:
-    proc = subprocess.run(
-        [binary(name), *args],
-        input=stdin,
-        capture_output=True,
-        check=False,
-    )
+DEFAULT_TIMEOUT_S = 300.0
+
+# Uploaded files are untrusted: only the QuickTime/MP4 demuxer reading a local file, so a
+# playlist disguised as .mp4 cannot pull in other files or URLs.
+SAFE_INPUT = ("-protocol_whitelist", "file", "-f", "mov")
+
+
+def run(
+    name: str,
+    args: Sequence[str],
+    *,
+    stdin: bytes | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> bytes:
+    try:
+        proc = subprocess.run(
+            [binary(name), *args],
+            input=stdin,
+            capture_output=True,
+            check=False,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise FFmpegError(f"{name} timed out after {timeout_s:.0f} s") from e
     if proc.returncode != 0:
         tail = proc.stderr.decode(errors="replace").strip().splitlines()[-5:]
         raise FFmpegError(f"{name} failed ({proc.returncode}): " + " | ".join(tail))
