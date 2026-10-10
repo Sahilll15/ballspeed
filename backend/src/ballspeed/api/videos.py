@@ -103,7 +103,13 @@ def upload_video(store: StoreDep, file: Annotated[UploadFile, File()]) -> VideoM
                 f"{settings.min_fps_manual:.0f} fps is needed.",
                 "Record at 240 fps slow motion on a tripod.",
             )
-        extract_frames(src, rec.frames_dir)
+        if extract_frames(src, rec.frames_dir) != p.frame_count:
+            raise ApiError(
+                ErrorCode.UNSUPPORTED_FORMAT,
+                "Decoded frame count does not match the container's timestamps.",
+                "Re-export the clip as a standard MP4.",
+                status=415,
+            )
         rec.warnings = _fps_warnings(rec)
     except BaseException:
         shutil.rmtree(d, ignore_errors=True)

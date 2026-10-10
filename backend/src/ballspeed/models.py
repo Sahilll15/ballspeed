@@ -62,6 +62,7 @@ class Timestamps(BaseModel):
 
 
 CalibrationMode = Literal["vertical_plane", "ground_plane"]
+MAX_CALIBRATION_POINTS = 12
 
 
 class CalibrationPoint(BaseModel):
@@ -74,7 +75,7 @@ class CalibrationPoint(BaseModel):
 
 class CalibrationRequest(BaseModel):
     mode: CalibrationMode = "vertical_plane"
-    points: list[CalibrationPoint] = Field(min_length=4)
+    points: list[CalibrationPoint] = Field(min_length=4, max_length=MAX_CALIBRATION_POINTS)
 
 
 class Calibration(CalibrationRequest):

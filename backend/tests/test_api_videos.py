@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import numpy as np
 from fastapi.testclient import TestClient
 
 from ballspeed.synth import SyntheticClip, Variant
@@ -60,3 +63,64 @@ def test_rejects_playlist_disguised_as_mp4(client: TestClient, tmp_path: object)
     concat = f"ffconcat version 1.0\nfile '{secret}'\n"
     r = client.post("/api/videos", files={"file": ("y.mov", concat.encode(), "video/mp4")})
     assert r.status_code == 415
+
+
+def test_extracts_only_the_probed_stream(client: TestClient, tmp_path: Path) -> None:
+    from ballspeed import ffmpeg
+
+    small, big, both = tmp_path / "s.mp4", tmp_path / "b.mp4", tmp_path / "both.mp4"
+    for out, size in ((small, "160x120"), (big, "640x480")):
+        ffmpeg.run(
+            "ffmpeg",
+            [
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                f"testsrc=s={size}:r=60:d=0.5",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                str(out),
+            ],
+        )
+    ffmpeg.run(
+        "ffmpeg",
+        [
+            "-v",
+            "error",
+            "-i",
+            str(small),
+            "-i",
+            str(big),
+            "-map",
+            "0:v",
+            "-map",
+            "1:v",
+            "-c",
+            "copy",
+            str(both),
+        ],
+    )
+    with both.open("rb") as f:
+        r = client.post("/api/videos", files={"file": ("both.mp4", f, "video/mp4")})
+    assert r.status_code == 201, r.text
+    assert (r.json()["width"], r.json()["height"]) == (160, 120)
+    import cv2
+
+    vid = r.json()["id"]
+    img = client.get(f"/api/videos/{vid}/frames/0.jpg").content
+    frame = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
+    assert frame.shape[:2] == (120, 160)
+
+
+def test_calibration_point_limit(client: TestClient, clips: dict[Variant, SyntheticClip]) -> None:
+    vid = upload(client, clips["cfr"])["id"]
+    pts = [
+        {"label": str(i), "image": {"x": i, "y": i * i}, "world": {"x": i, "y": 1}}
+        for i in range(500)
+    ]
+    r = client.put(f"/api/videos/{vid}/calibration", json={"points": pts})
+    assert r.status_code == 422 and r.json()["code"] == "INVALID_INPUT"

@@ -104,6 +104,9 @@ def extract_frames(path: Path, out_dir: Path) -> int:
         *ffmpeg.SAFE_INPUT,
         "-i",
         str(path),
+        # Same stream ffprobe validated; ffmpeg's default "best stream" pick could differ.
+        "-map",
+        "0:v:0",
         "-frames:v",
         str(MAX_FRAMES),
         "-fps_mode",
