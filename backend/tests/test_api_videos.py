@@ -124,3 +124,16 @@ def test_calibration_point_limit(client: TestClient, clips: dict[Variant, Synthe
     ]
     r = client.put(f"/api/videos/{vid}/calibration", json={"points": pts})
     assert r.status_code == 422 and r.json()["code"] == "INVALID_INPUT"
+
+
+def test_serves_frontend_when_static_dir_set(tmp_path: Path) -> None:
+    from ballspeed.config import Settings
+    from ballspeed.main import create_app
+
+    site = tmp_path / "dist"
+    site.mkdir()
+    (site / "index.html").write_text("<title>Ballspeed</title>")
+    app = create_app(Settings(data_dir=tmp_path / "data", static_dir=site))
+    with TestClient(app) as c:
+        assert "Ballspeed" in c.get("/").text
+        assert c.get("/api/health").json() == {"status": "ok"}

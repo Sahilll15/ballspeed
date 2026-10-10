@@ -54,6 +54,10 @@ cd backend && uv run pytest              # renders synthetic clips, checks speed
 cd frontend && npm run test:e2e          # drives the real UI with Playwright
 ```
 
+## Deploying
+
+The root `Dockerfile` builds the frontend and serves it from FastAPI, with ffmpeg installed, so the whole app runs as one container. `render.yaml` describes it as a Render web service. The app keeps uploads on local disk between requests, so run a single instance.
+
 ## Recording a demo
 
 `frontend/scripts/record-demo.mjs` drives the app in a 1080x1920 portrait window and saves an mp4, for reels. Run it with both servers up:

@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ballspeed
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: BALLSPEED_CORS_ORIGINS
+        value: '[]'

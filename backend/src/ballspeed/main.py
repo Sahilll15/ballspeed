@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from ballspeed.api import analysis, videos
 from ballspeed.config import Settings, settings
@@ -50,6 +51,10 @@ def create_app(cfg: Settings = settings) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    # Mounted last so /api routes win; serves the built frontend in single-container deploys.
+    if cfg.static_dir is not None:
+        app.mount("/", StaticFiles(directory=cfg.static_dir, html=True), name="frontend")
 
     return app
 
