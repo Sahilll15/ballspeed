@@ -11,3 +11,5 @@ dist/
 *.mov
 !docs/**/*.mp4
 recordings/
+test-results/
+playwright-report/
