@@ -1,12 +1,18 @@
 """Speed from marked frames, clicked ball positions, or a fitted track."""
 
 import math
+from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import NDArray
+from scipy.optimize import least_squares
 
 from ballspeed.models import Calibration, ManualSpeedRequest, SpeedResult, TrackPoint
 from ballspeed.pipeline import calibration as calib
+from ballspeed.pipeline import release
 from ballspeed.pipeline.pitch import MS_TO_KMH
+
+FloatArray = NDArray[np.float64]
 
 FRAME_COUNT_WARNING = (
     "Frame-count mode averages the whole flight, including the slowdown after the bounce. "
@@ -80,3 +86,56 @@ def manual(
         track=track,
         warnings=warnings,
     )
+
+
+MIN_FLIGHT_POINTS = 6
+
+
+@dataclass(frozen=True)
+class TrackFit:
+    release_speed_ms: float
+    avg_speed_ms: float
+    sigma_ms: float
+    decel_ms2: float
+    release_idx: int
+    bounce_idx: int | None
+    end_idx: int
+
+
+def _robust_quadratic(tau: FloatArray, y: FloatArray) -> tuple[FloatArray, FloatArray]:
+    """Quadratic fit with soft-L1 loss; returns coefficients [c, b, a] and their covariance."""
+
+    def resid(p: FloatArray) -> FloatArray:
+        out: FloatArray = p[0] + p[1] * tau + p[2] * tau**2 - y
+        return out
+
+    init = np.polyfit(tau, y, 2)[::-1]
+    res = least_squares(resid, init, loss="soft_l1", f_scale=0.02)
+    j = res.jac
+    dof = max(len(y) - 3, 1)
+    s2 = float(np.sum(res.fun**2) / dof)
+    cov: FloatArray = np.linalg.pinv(j.T @ j) * s2
+    coef: FloatArray = res.x
+    return coef, cov
+
+
+def fit_track(t: FloatArray, xz: FloatArray, release_idx: int | None) -> TrackFit:
+    """Fit position against time over pre-bounce flight; speed at release is the radar figure.
+
+    x and z come from the vertical-plane homography, so they are true metres in the ball's plane.
+    """
+    bounce = release.bounce_index(t, xz)
+    end = bounce if bounce is not None else len(t)
+    start = release.ballistic_start(t, xz, end) if release_idx is None else release_idx
+    if end - start < MIN_FLIGHT_POINTS:
+        raise ValueError(f"only {end - start} ball positions between release and bounce")
+    tau = t[start:end] - t[start]
+    (_cx, bx, ax), cov_x = _robust_quadratic(tau, xz[start:end, 0])
+    (_cz, bz, az), cov_z = _robust_quadratic(tau, xz[start:end, 1])
+    v0 = math.hypot(bx, bz)
+    # Speed variance from the release-velocity terms, d|v|/dbx = bx/|v|.
+    sigma = math.sqrt((bx / v0) ** 2 * cov_x[1, 1] + (bz / v0) ** 2 * cov_z[1, 1])
+    dense = np.linspace(0, tau[-1], 200)
+    speeds = np.hypot(bx + 2 * ax * dense, bz + 2 * az * dense)
+    decel = abs(2 * (bx * ax + bz * az) / v0)
+    return TrackFit(v0, float(np.mean(speeds)), sigma, decel, start, bounce, end - 1)

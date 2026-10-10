@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -24,6 +25,8 @@ def create_app(cfg: Settings = settings) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         store = Store(cfg.data_dir, ttl_s=cfg.ttl_minutes * 60)
         app.state.store = store
+        # One analysis at a time keeps memory bounded on a laptop.
+        app.state.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis")
         task = asyncio.create_task(_sweeper(store))
         try:
             yield
@@ -31,6 +34,7 @@ def create_app(cfg: Settings = settings) -> FastAPI:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+            app.state.executor.shutdown(wait=True, cancel_futures=True)
             store.close()
 
     app = FastAPI(title="Ball speed estimator", version="0.1.0", lifespan=lifespan)
@@ -41,6 +45,7 @@ def create_app(cfg: Settings = settings) -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.include_router(videos.router)
     app.include_router(analysis.router)
+    app.include_router(analysis.jobs_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
